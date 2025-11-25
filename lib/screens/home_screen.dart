@@ -6,6 +6,25 @@ import 'package:provider/provider.dart';
 import '../models/mission_model.dart';
 import '../models/user_model.dart';
 
+// Helper class to hold selected data for minimal rebuilds
+class _HomeScreenData {
+  final List missions;
+  final UserModel user;
+  
+  _HomeScreenData({required this.missions, required this.user});
+  
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _HomeScreenData &&
+          runtimeType == other.runtimeType &&
+          missions == other.missions &&
+          user == other.user;
+  
+  @override
+  int get hashCode => missions.hashCode ^ user.hashCode;
+}
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -22,8 +41,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final missions = context.watch<MissionsModel>().missions;
-    final user = context.watch<UserModel>();
+    // Use Selector to minimize rebuilds - only rebuild when missions or user data actually changes
+    return Selector2<MissionsModel, UserModel, _HomeScreenData>(
+      selector: (_, missions, user) => _HomeScreenData(
+        missions: missions.missions,
+        user: user,
+      ),
+      builder: (context, data, child) {
+        final missions = data.missions;
+        final user = data.user;
     
     return Scaffold(
       backgroundColor: const Color(0xFF1B1B1B),
@@ -100,11 +126,13 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 20),
               
               // Claim XP Button
-              _buildClaimXPButton(),
+              _buildClaimXPButton(user),
             ],
           ),
         ),
       ),
+        );
+      },
     );
   }
 
@@ -133,9 +161,10 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Row(
+        child: RepaintBoundary(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Row(
             children: [
               Container(
                 width: 60,
@@ -177,6 +206,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ],
+          ),
           ),
         ),
       ),
@@ -465,7 +495,82 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildClaimXPButton() {
+  Widget _buildFeatureButton({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white.withOpacity(0.1),
+              Colors.white.withOpacity(0.05),
+            ],
+          ),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.2),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF4ECDC4), Color(0xFF44A08D)],
+                ),
+              ),
+              child: Icon(icon, color: Colors.white, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.inter(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              LucideIcons.arrowRight,
+              color: Colors.white70,
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildClaimXPButton(UserModel user) {
     return SizedBox(
       width: double.infinity,
       height: 50,

@@ -239,19 +239,22 @@ class CommunityScreen extends StatelessWidget {
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
                 rank == 1 ? LucideIcons.crown : LucideIcons.trophy,
                 color: color,
-                size: 24,
+                size: 20,
               ),
-              const SizedBox(height: 4),
-              Text(
-                '#$rank',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: color,
+              const SizedBox(height: 2),
+              Flexible(
+                child: Text(
+                  '#$rank',
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
                 ),
               ),
             ],

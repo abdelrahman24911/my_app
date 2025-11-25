@@ -1,137 +1,133 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:convert';
+import '../services/firebase_auth_service.dart';
 
 class AuthModel extends ChangeNotifier {
   bool _isAuthenticated = false;
   String? _userEmail;
   String? _userName;
-  Map<String, UserAccount> _userAccounts = {};
+  String? _errorMessage;
+  final FirebaseAuthService _firebaseAuthService = FirebaseAuthService();
 
   bool get isAuthenticated => _isAuthenticated;
   String? get userEmail => _userEmail;
   String? get userName => _userName;
+  String? get errorMessage => _errorMessage;
 
   AuthModel() {
-    _loadAuthState();
-    _loadUserAccounts();
+    _initializeAuth();
   }
 
-  // Load authentication state from storage
-  Future<void> _loadAuthState() async {
-    final prefs = await SharedPreferences.getInstance();
-    _isAuthenticated = prefs.getBool('isAuthenticated') ?? false;
-    _userEmail = prefs.getString('userEmail');
-    _userName = prefs.getString('userName');
-    notifyListeners();
-  }
-
-  // Load user accounts from storage
-  Future<void> _loadUserAccounts() async {
-    final prefs = await SharedPreferences.getInstance();
-    final accountsJson = prefs.getString('userAccounts');
-    if (accountsJson != null) {
-      final Map<String, dynamic> accountsMap = json.decode(accountsJson);
-      _userAccounts = accountsMap.map((key, value) => 
-        MapEntry(key, UserAccount.fromJson(value)));
-    }
-  }
-
-  // Save authentication state to storage
-  Future<void> _saveAuthState() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isAuthenticated', _isAuthenticated);
-    await prefs.setString('userEmail', _userEmail ?? '');
-    await prefs.setString('userName', _userName ?? '');
-  }
-
-  // Save user accounts to storage
-  Future<void> _saveUserAccounts() async {
-    final prefs = await SharedPreferences.getInstance();
-    final accountsMap = _userAccounts.map((key, value) => 
-      MapEntry(key, value.toJson()));
-    await prefs.setString('userAccounts', json.encode(accountsMap));
+  // Initialize authentication state
+  Future<void> _initializeAuth() async {
+    // Listen to Firebase auth state changes
+    _firebaseAuthService.authStateChanges.listen((User? user) {
+      print('Auth state changed: ${user != null ? 'User logged in' : 'User logged out'}');
+      if (user != null) {
+        _isAuthenticated = true;
+        _userEmail = user.email;
+        _userName = user.displayName;
+        _errorMessage = null;
+        print('User authenticated: ${user.email}');
+      } else {
+        _isAuthenticated = false;
+        _userEmail = null;
+        _userName = null;
+        print('User not authenticated');
+      }
+      notifyListeners();
+    });
   }
 
   Future<bool> login(String email, String password) async {
-    // Check if user exists and password matches
-    if (_userAccounts.containsKey(email)) {
-      final account = _userAccounts[email]!;
-      if (account.password == password) {
-        _isAuthenticated = true;
-        _userEmail = email;
-        _userName = account.name;
-        await _saveAuthState();
-        notifyListeners();
+    try {
+      print('AuthModel: Starting login for $email');
+      _errorMessage = null;
+      final userCredential = await _firebaseAuthService.signInWithEmailAndPassword(email, password);
+      if (userCredential != null) {
+        print('AuthModel: Login successful for $email');
         return true;
       }
+      print('AuthModel: Login failed - no user credential');
+      return false;
+    } catch (e) {
+      print('AuthModel: Login error - $e');
+      // Check if the error is a type casting issue that doesn't affect authentication
+      if (e.toString().contains('PigeonUserDetails') || e.toString().contains('type cast')) {
+        print('AuthModel: Type casting error detected, checking authentication status');
+        // Wait a moment for auth state to update
+        await Future.delayed(const Duration(milliseconds: 200));
+        // Check if user is actually authenticated despite the error
+        if (_firebaseAuthService.currentUser != null) {
+          print('AuthModel: User is authenticated despite type casting error');
+          return true;
+        }
+      }
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
     }
-    return false;
   }
 
   Future<bool> signUp(String email, String password, String name) async {
-    // Check if user already exists
-    if (_userAccounts.containsKey(email)) {
-      return false; // User already exists
+    try {
+      print('Starting signup for: $email');
+      _errorMessage = null;
+      final userCredential = await _firebaseAuthService.createUserWithEmailAndPassword(email, password);
+      if (userCredential != null) {
+        print('User created successfully, updating profile');
+        // Update the user's display name
+        await _firebaseAuthService.updateUserProfile(displayName: name);
+        print('Profile updated successfully');
+        return true;
+      }
+      print('User creation failed');
+      return false;
+    } catch (e) {
+      print('Signup error: $e');
+      // Check if it's a type casting error but user is actually authenticated
+      if (e.toString().contains('PigeonUserDetails') || e.toString().contains('type cast')) {
+        print('AuthModel: Type casting error detected during signup, checking authentication status');
+        await Future.delayed(const Duration(milliseconds: 200));
+        if (_firebaseAuthService.currentUser != null) {
+          print('AuthModel: User is authenticated despite type casting error during signup');
+          return true;
+        }
+      }
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
     }
-
-    // Create new user account
-    _userAccounts[email] = UserAccount(
-      email: email,
-      password: password,
-      name: name,
-    );
-
-    // Save accounts and authenticate
-    await _saveUserAccounts();
-    _isAuthenticated = true;
-    _userEmail = email;
-    _userName = name;
-    await _saveAuthState();
-    notifyListeners();
-    return true;
   }
 
   Future<void> logout() async {
-    _isAuthenticated = false;
-    _userEmail = null;
-    _userName = null;
-    await _saveAuthState();
-    notifyListeners();
+    try {
+      await _firebaseAuthService.signOut();
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
   }
 
-  // Clear all stored data (for testing or account deletion)
-  Future<void> clearAllData() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
-    _isAuthenticated = false;
-    _userEmail = null;
-    _userName = null;
-    _userAccounts.clear();
+  // Send password reset email
+  Future<bool> sendPasswordResetEmail(String email) async {
+    try {
+      _errorMessage = null;
+      await _firebaseAuthService.sendPasswordResetEmail(email);
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Clear error message
+  void clearError() {
+    _errorMessage = null;
     notifyListeners();
   }
 }
 
-class UserAccount {
-  final String email;
-  final String password;
-  final String name;
-
-  UserAccount({
-    required this.email,
-    required this.password,
-    required this.name,
-  });
-
-  Map<String, dynamic> toJson() => {
-    'email': email,
-    'password': password,
-    'name': name,
-  };
-
-  factory UserAccount.fromJson(Map<String, dynamic> json) => UserAccount(
-    email: json['email'],
-    password: json['password'],
-    name: json['name'],
-  );
-}

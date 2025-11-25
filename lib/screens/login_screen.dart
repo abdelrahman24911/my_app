@@ -31,22 +31,291 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
       
-      final authModel = Provider.of<AuthModel>(context, listen: false);
-      final success = await authModel.login(_emailController.text, _passwordController.text);
-      
-      setState(() => _isLoading = false);
-      
-      if (!success) {
+      try {
+        final authModel = Provider.of<AuthModel>(context, listen: false);
+        print('Attempting login for: ${_emailController.text}');
+        final success = await authModel.login(_emailController.text, _passwordController.text);
+        
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Invalid email or password'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          setState(() => _isLoading = false);
+        }
+        
+        if (!success) {
+          if (mounted) {
+            final errorMessage = authModel.errorMessage ?? 'Invalid email or password';
+            print('Login failed: $errorMessage');
+            // Check if it's a type casting error but user is actually authenticated
+            if (errorMessage.contains('PigeonUserDetails') || errorMessage.contains('type cast')) {
+              print('Type casting error detected, checking if user is actually authenticated');
+              // Wait a moment for auth state to update
+              await Future.delayed(const Duration(milliseconds: 100));
+              if (mounted && authModel.isAuthenticated) {
+                print('User is authenticated despite type casting error, proceeding');
+                return; // Don't show error dialog
+              }
+            }
+            _showErrorDialog(errorMessage);
+          }
+        } else {
+          print('Login successful, AuthWrapper will handle navigation');
+        }
+        // If login is successful, AuthWrapper will automatically navigate to main app
+        // No need to show success dialog as it interferes with navigation
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          print('Login error: $e');
+          _showErrorDialog('An unexpected error occurred. Please try again.');
         }
       }
     }
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          backgroundColor: Colors.red.shade50,
+          title: Row(
+            children: [
+              Icon(Icons.error_outline, color: Colors.red.shade600, size: 28),
+              const SizedBox(width: 12),
+              Text(
+                'Login Failed',
+                style: GoogleFonts.inter(
+                  color: Colors.red.shade800,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                message,
+                style: GoogleFonts.inter(
+                  color: Colors.red.shade700,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.lightbulb_outline, color: Colors.blue.shade600, size: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Tips:',
+                          style: GoogleFonts.inter(
+                            color: Colors.blue.shade800,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '• Check if your email is correct\n• Make sure your password is right\n• Try resetting your password if needed',
+                      style: GoogleFonts.inter(
+                        color: Colors.blue.shade700,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'Try Again',
+                style: GoogleFonts.inter(
+                  color: Colors.red.shade600,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _showForgotPasswordDialog();
+              },
+              child: Text(
+                'Forgot Password?',
+                style: GoogleFonts.inter(
+                  color: Colors.blue.shade600,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showForgotPasswordDialog() {
+    final emailController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          backgroundColor: Colors.blue.shade50,
+          title: Row(
+            children: [
+              Icon(Icons.lock_reset, color: Colors.blue.shade600, size: 28),
+              const SizedBox(width: 12),
+              Text(
+                'Reset Password',
+                style: GoogleFonts.inter(
+                  color: Colors.blue.shade800,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Enter your email address and we\'ll send you a link to reset your password.',
+                style: GoogleFonts.inter(
+                  color: Colors.blue.shade700,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(
+                  labelText: 'Email Address',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.inter(
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () async {
+                if (emailController.text.isNotEmpty) {
+                  final authModel = Provider.of<AuthModel>(context, listen: false);
+                  final success = await authModel.sendPasswordResetEmail(emailController.text);
+                  
+                  Navigator.of(context).pop();
+                  
+                  if (success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Password reset email sent to ${emailController.text}'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to send reset email. Please try again.'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: Text(
+                'Send Reset Link',
+                style: GoogleFonts.inter(
+                  color: Colors.blue.shade600,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          backgroundColor: Colors.green.shade50,
+          title: Row(
+            children: [
+              Icon(Icons.check_circle_outline, color: Colors.green.shade600, size: 28),
+              const SizedBox(width: 12),
+              Text(
+                'Welcome Back!',
+                style: GoogleFonts.inter(
+                  color: Colors.green.shade800,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'You have successfully logged in to MindQuest.',
+            style: GoogleFonts.inter(
+              color: Colors.green.shade700,
+              fontSize: 14,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'Continue',
+                style: GoogleFonts.inter(
+                  color: Colors.green.shade600,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -159,8 +428,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                   if (value == null || value.isEmpty) {
                                     return 'Please enter your email';
                                   }
-                                  if (!value.contains('@')) {
-                                    return 'Please enter a valid email';
+                                  if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                                    return 'Please enter a valid email address';
                                   }
                                   return null;
                                 },
@@ -180,6 +449,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                   if (value.length < 6) {
                                     return 'Password must be at least 6 characters';
                                   }
+                                  if (value.length > 50) {
+                                    return 'Password is too long';
+                                  }
                                   return null;
                                 },
                               ),
@@ -189,7 +461,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: TextButton(
-                                  onPressed: () {},
+                                  onPressed: _showForgotPasswordDialog,
                                   child: Text(
                                     'Forgot Password?',
                                     style: GoogleFonts.inter(

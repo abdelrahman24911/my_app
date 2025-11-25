@@ -7,6 +7,7 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
@@ -137,6 +138,15 @@ class MainActivity : FlutterActivity() {
                 "hasUsagePermission" -> {
                     result.success(hasUsageAccessPermission(this))
                 }
+                // Request Overlay permission
+                "requestOverlayPermission" -> {
+                    requestOverlayPermission(this)
+                    result.success(true)
+                }
+                // Check Overlay permission
+                "hasOverlayPermission" -> {
+                    result.success(hasOverlayPermission(this))
+                }
                 // Validate usage data accuracy
                 "validateUsageData" -> {
                     try {
@@ -213,6 +223,15 @@ class MainActivity : FlutterActivity() {
                     Toast.makeText(this, "Block logic initiated for: $appName", Toast.LENGTH_LONG).show()
                     result.success(true)
                 }
+                "getInstalledApps" -> {
+                    try {
+                        val appsList = getInstalledApps()
+                        result.success(appsList)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error getting installed apps: ${e.message}")
+                        result.error("APPS_ERROR", "Failed to get installed apps.", e.message)
+                    }
+                }
                 else -> {
                     result.notImplemented()
                 }
@@ -273,6 +292,33 @@ class MainActivity : FlutterActivity() {
             return mode == AppOpsManager.MODE_ALLOWED
         }
         return false
+    }
+
+    // Request Overlay Permission
+    private fun requestOverlayPermission(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (!Settings.canDrawOverlays(context)) {
+                try {
+                    val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
+                    intent.data = Uri.parse("package:${context.packageName}")
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to open overlay permission settings: ${e.message}")
+                    Toast.makeText(context, "Cannot open Overlay Permission settings.", Toast.LENGTH_LONG).show()
+                }
+            } else {
+                Toast.makeText(context, "Overlay Permission already granted.", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    // Check Overlay Permission
+    private fun hasOverlayPermission(context: Context): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Settings.canDrawOverlays(context)
+        } else {
+            true
+        }
     }
 
     // Get usage statistics for the last 24 hours
@@ -623,5 +669,94 @@ class MainActivity : FlutterActivity() {
         }
         
         return validationResult
+    }
+
+    // Blocking Service Helper Methods
+    private fun requestAccessibilityPermission() {
+        try {
+            val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            startActivity(intent)
+            Toast.makeText(this, "Please enable the blocking service in accessibility settings", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to open accessibility settings: ${e.message}")
+            Toast.makeText(this, "Failed to open accessibility settings", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun openAccessibilitySettings() {
+        requestAccessibilityPermission()
+    }
+
+    private fun getInstalledApps(): List<Map<String, Any>> {
+        val pm = packageManager
+        val currentPackage = packageName
+
+        val mainIntent = Intent(Intent.ACTION_MAIN, null)
+        mainIntent.addCategory(Intent.CATEGORY_LAUNCHER)
+        val resolveInfos = pm.queryIntentActivities(mainIntent, 0)
+
+        val apps = mutableListOf<Map<String, Any>>()
+        resolveInfos.forEach { info ->
+            try {
+                val activityInfo = info.activityInfo ?: return@forEach
+                val appInfo = activityInfo.applicationInfo ?: return@forEach
+                val pkg = activityInfo.packageName
+
+                if (pkg == currentPackage) return@forEach
+
+                val isSystem = (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+                if (isSystem) return@forEach
+
+                val appName = pm.getApplicationLabel(appInfo).toString()
+                apps.add(
+                    mapOf(
+                        "package_name" to pkg,
+                        "app_name" to appName
+                    )
+                )
+            } catch (_: Exception) { }
+        }
+
+        return apps.distinctBy { it["package_name"] }.sortedBy { (it["app_name"] as String).lowercase() }
+    }
+
+    private fun updateBlockedApps(apps: List<String>) {
+        val legacyPrefs = getSharedPreferences("blocking_prefs", Context.MODE_PRIVATE)
+        legacyPrefs.edit().putString("blocked_apps", apps.joinToString(",")).apply()
+
+        val blockingDataPrefs = getSharedPreferences("blocking_data", Context.MODE_PRIVATE)
+        blockingDataPrefs.edit().putStringSet("blocked_apps", apps.toSet()).apply()
+
+        Log.d(TAG, "Updated blocked apps: ${apps.size} apps")
+    }
+
+    private fun updateBlockedKeywords(keywords: List<String>) {
+        val legacyPrefs = getSharedPreferences("blocking_prefs", Context.MODE_PRIVATE)
+        legacyPrefs.edit().putString("blocked_keywords", keywords.joinToString(",")).apply()
+
+        val blockingDataPrefs = getSharedPreferences("blocking_data", Context.MODE_PRIVATE)
+        blockingDataPrefs.edit().putStringSet("blocked_keywords", keywords.toSet()).apply()
+
+        Log.d(TAG, "Updated blocked keywords: ${keywords.size} keywords")
+    }
+
+    private fun updateWhitelistApps(apps: List<String>) {
+        val legacyPrefs = getSharedPreferences("blocking_prefs", Context.MODE_PRIVATE)
+        legacyPrefs.edit().putString("whitelist_apps", apps.joinToString(",")).apply()
+
+        val blockingDataPrefs = getSharedPreferences("blocking_data", Context.MODE_PRIVATE)
+        blockingDataPrefs.edit().putStringSet("whitelist_apps", apps.toSet()).apply()
+
+        Log.d(TAG, "Updated whitelist apps: ${apps.size} apps")
+    }
+
+    private fun setFocusMode(enabled: Boolean) {
+        val legacyPrefs = getSharedPreferences("blocking_prefs", Context.MODE_PRIVATE)
+        legacyPrefs.edit().putBoolean("focus_mode", enabled).apply()
+
+        val blockingDataPrefs = getSharedPreferences("blocking_data", Context.MODE_PRIVATE)
+        blockingDataPrefs.edit().putBoolean("focus_mode", enabled).apply()
+
+        Log.d(TAG, "Focus mode ${if (enabled) "enabled" else "disabled"}")
     }
 }

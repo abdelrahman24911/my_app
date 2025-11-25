@@ -384,25 +384,31 @@ class ChallengesScreen extends StatelessWidget {
                 size: 16,
               ),
               const SizedBox(width: 4),
-              Text(
-                '$participants participants',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: Colors.white.withOpacity(0.7),
+              Flexible(
+                child: Text(
+                  '$participants participants',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: Colors.white.withOpacity(0.7),
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 8),
               Icon(
                 LucideIcons.clock,
                 color: Colors.white.withOpacity(0.7),
                 size: 16,
               ),
               const SizedBox(width: 4),
-              Text(
-                timeLeft,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: Colors.white.withOpacity(0.7),
+              Flexible(
+                child: Text(
+                  timeLeft,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: Colors.white.withOpacity(0.7),
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               const Spacer(),

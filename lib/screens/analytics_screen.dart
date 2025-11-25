@@ -1,34 +1,12 @@
 import 'dart:ui';
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/services.dart';
+import '../services/screen_time_service.dart';
 
-// MethodChannel for native Android communication
-const platform = MethodChannel('com.appguard.native_calls');
-
-// App usage data model
-class AppUsageData {
-  final String appName;
-  final String packageName;
-  final int totalTimeInSeconds;
-
-  AppUsageData({
-    required this.appName,
-    required this.packageName,
-    required this.totalTimeInSeconds,
-  });
-
-  factory AppUsageData.fromJson(Map<String, dynamic> json) {
-    return AppUsageData(
-      appName: json['appName'] as String,
-      packageName: json['packageName'] as String,
-      totalTimeInSeconds: json['totalTimeInSeconds'] as int,
-    );
-  }
-}
 
 class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key});
@@ -40,9 +18,9 @@ class AnalyticsScreen extends StatefulWidget {
 class _AnalyticsScreenState extends State<AnalyticsScreen> {
   bool _hasPermission = false;
   bool _isLoading = false;
-  List<AppUsageData> usageData = [];
+  List<Map<String, dynamic>> usageData = [];
   int totalScreenTime = 0;
-  String _selectedTimePeriod = 'daily'; // 'daily', 'weekly', 'monthly'
+  String _selectedTimePeriod = 'daily'; // 'daily', 'yesterday', 'weekly', 'monthly', '3months', '6months', '1year'
 
   @override
   void initState() {
@@ -52,15 +30,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
   Future<void> _checkPermission() async {
     try {
-      final hasPermission = await platform.invokeMethod('hasUsagePermission');
+      final hasPermission = await ScreenTimeService.checkUsageStatsPermission();
       setState(() {
         _hasPermission = hasPermission;
       });
       if (hasPermission) {
         _loadUsageStats();
       }
-    } on PlatformException catch (e) {
-      debugPrint("Permission check failed: ${e.message}");
+    } catch (e) {
+      debugPrint("Permission check failed: $e");
       setState(() {
         _hasPermission = false;
       });
@@ -73,7 +51,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     });
     
     try {
-      await platform.invokeMethod('requestUsagePermission');
+      await ScreenTimeService.requestUsageStatsPermission();
       _showPermissionDialog();
     } catch (e) {
       debugPrint('Error requesting permission: $e');
@@ -87,41 +65,63 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
   Future<void> _loadUsageStats() async {
     try {
-      String methodName;
-      switch (_selectedTimePeriod) {
-        case 'weekly':
-          methodName = 'getWeeklyUsageStats';
-          break;
-        case 'monthly':
-          methodName = 'getMonthlyUsageStats';
-          break;
-        case '3months':
-          methodName = 'get3MonthsUsageStats';
-          break;
-        case '6months':
-          methodName = 'get6MonthsUsageStats';
-          break;
-        case '1year':
-          methodName = 'get1YearUsageStats';
-          break;
-        default:
-          methodName = 'getUsageStats';
+      setState(() {
+        _isLoading = true;
+      });
+
+      // Note: Period selection is handled by the service internally
+
+      List<Map<String, dynamic>> realUsageStats;
+      if (_selectedTimePeriod == 'weekly') {
+        realUsageStats = await ScreenTimeService.getBetterWeeklyUsage();
+      } else {
+        realUsageStats = await ScreenTimeService.getUltraAccurateUsageStats(period: _selectedTimePeriod);
       }
       
-      final List<dynamic> rawData = await platform.invokeMethod(methodName);
-      final List<AppUsageData> loadedData = rawData
-          .map((item) => AppUsageData.fromJson(Map<String, dynamic>.from(item)))
-          .toList();
-
+      // Debug: Print detailed information about the data
+      print('=== USAGE STATS DEBUG ===');
+      print('Total apps found: ${realUsageStats.length}');
+      
+      if (realUsageStats.isNotEmpty) {
+        print('Sample usage data: ${realUsageStats.first}');
+        
+        // Show top 5 apps with their raw data
+        final sortedStats = List.from(realUsageStats)
+          ..sort((a, b) => (b['usageTime'] as int).compareTo(a['usageTime'] as int));
+        
+        print('Top 5 apps by usage:');
+        for (int i = 0; i < 5 && i < sortedStats.length; i++) {
+          final app = sortedStats[i];
+          final rawTime = app['usageTime'] as int;
+          final timeInSeconds = rawTime ~/ 1000;
+          final timeInMinutes = timeInSeconds ~/ 60;
+          final timeInHours = timeInMinutes ~/ 60;
+          
+          print('${i + 1}. ${app['appName']}: $rawTime ms = $timeInSeconds sec = $timeInMinutes min = $timeInHours hours');
+        }
+      }
+      
       if (mounted) {
         setState(() {
-          usageData = loadedData.where((d) => d.totalTimeInSeconds > 0).toList()
-            ..sort((a, b) => b.totalTimeInSeconds.compareTo(a.totalTimeInSeconds));
-          totalScreenTime = loadedData.fold(0, (sum, item) => sum + item.totalTimeInSeconds);
+          usageData = realUsageStats.where((d) => d['usageTime'] > 0).toList()
+            ..sort((a, b) => (b['usageTime'] as int).compareTo(a['usageTime'] as int));
+          // Convert milliseconds to seconds for display
+          totalScreenTime = realUsageStats.fold(0, (sum, item) => sum + ((item['usageTime'] as int) ~/ 1000));
+          
+          // Debug: Print the calculated total time
+          print('=== CALCULATED TOTALS ===');
+          print('Total screen time (seconds): $totalScreenTime');
+          print('Total screen time (minutes): ${totalScreenTime / 60}');
+          print('Total screen time (hours): ${totalScreenTime / 3600}');
+          print('Apps with usage: ${usageData.length}');
         });
       }
-    } on PlatformException catch (e) {
-      debugPrint("Failed to load usage stats: ${e.message}");
+    } catch (e) {
+      debugPrint("Failed to load usage stats: $e");
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
@@ -227,8 +227,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
   void _openUsageStatsSettings() {
     // This will open the usage stats settings page
-    // The native Android code should handle this
-    platform.invokeMethod('requestUsagePermission');
+    ScreenTimeService.requestUsageStatsPermission();
   }
 
   @override
@@ -342,7 +341,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                _buildTimePeriodButton('Daily', 'daily', LucideIcons.calendar),
+                _buildTimePeriodButton('Today', 'daily', LucideIcons.calendar),
+                const SizedBox(width: 8),
+                _buildTimePeriodButton('Yesterday', 'yesterday', LucideIcons.calendar),
                 const SizedBox(width: 8),
                 _buildTimePeriodButton('Weekly', 'weekly', LucideIcons.calendarDays),
                 const SizedBox(width: 8),
@@ -444,11 +445,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           ElevatedButton(
             onPressed: () async {
               try {
-                final result = await platform.invokeMethod('validateUsageData');
+                final realStats = await ScreenTimeService.getUltraAccurateUsageStats(period: _selectedTimePeriod);
+                final totalTimeMs = realStats.fold(0, (sum, item) => sum + (item['usageTime'] as int));
+                final totalTimeHours = totalTimeMs / (1000 * 60 * 60);
+                
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Validation: ${result.toString()}'),
-                    duration: const Duration(seconds: 3),
+                    content: Text('Found ${realStats.length} apps. Total time: ${totalTimeHours.toStringAsFixed(2)} hours'),
+                    duration: const Duration(seconds: 5),
                   ),
                 );
               } catch (e) {
@@ -568,6 +572,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   Widget _buildOverviewCards() {
     String timeLabel;
     switch (_selectedTimePeriod) {
+      case 'yesterday':
+        timeLabel = 'Yesterday';
+        break;
       case 'weekly':
         timeLabel = 'This Week';
         break;
@@ -789,78 +796,93 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           const SizedBox(height: 20),
           SizedBox(
             height: 200,
-              child: LineChart(
-                LineChartData(
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  horizontalInterval: 1,
-                  getDrawingHorizontalLine: (value) {
-                    return FlLine(
-                      color: Colors.white.withOpacity(0.1),
-                      strokeWidth: 1,
-                    );
-                  },
-                ),
-                titlesData: FlTitlesData(
-                  show: true,
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, meta) {
-                        const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-                        return Text(
-                          days[value.toInt() % 7],
-                          style: GoogleFonts.inter(
-                            color: Colors.white.withOpacity(0.7),
-                            fontSize: 12,
-                          ),
-                        );
-                      },
+            child: FutureBuilder<List<FlSpot>>(
+              future: _loadWeeklyTrendData(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xFF7C3AED),
                     ),
-                  ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          '${value.toInt()}h',
-                          style: GoogleFonts.inter(
-                            color: Colors.white.withOpacity(0.7),
-                            fontSize: 12,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                  borderData: FlBorderData(show: false),
-                  lineBarsData: [
-                    LineChartBarData(
-                    spots: _generateWeeklyData(),
-                      isCurved: true,
-                    color: const Color(0xFF7C3AED),
-                    barWidth: 3,
-                    dotData: FlDotData(
+                  );
+                }
+                
+                final spots = snapshot.data ?? _generateWeeklyData();
+                
+                return LineChart(
+                  LineChartData(
+                    gridData: FlGridData(
                       show: true,
-                      getDotPainter: (spot, percent, barData, index) {
-                        return FlDotCirclePainter(
-                          radius: 4,
-                          color: const Color(0xFF7C3AED),
-                          strokeWidth: 2,
-                          strokeColor: Colors.white,
+                      drawVerticalLine: false,
+                      horizontalInterval: 1,
+                      getDrawingHorizontalLine: (value) {
+                        return FlLine(
+                          color: Colors.white.withOpacity(0.1),
+                          strokeWidth: 1,
                         );
                       },
                     ),
-                    belowBarData: BarAreaData(
+                    titlesData: FlTitlesData(
                       show: true,
-                      color: const Color(0xFF7C3AED).withOpacity(0.1),
+                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          getTitlesWidget: (value, meta) {
+                            const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                            return Text(
+                              days[value.toInt() % 7],
+                              style: GoogleFonts.inter(
+                                color: Colors.white.withOpacity(0.7),
+                                fontSize: 12,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          getTitlesWidget: (value, meta) {
+                            return Text(
+                              '${value.toInt()}h',
+                              style: GoogleFonts.inter(
+                                color: Colors.white.withOpacity(0.7),
+                                fontSize: 12,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
                     ),
+                    borderData: FlBorderData(show: false),
+                    lineBarsData: [
+                      LineChartBarData(
+                        spots: spots,
+                        isCurved: true,
+                        color: const Color(0xFF7C3AED),
+                        barWidth: 3,
+                        dotData: FlDotData(
+                          show: true,
+                          getDotPainter: (spot, percent, barData, index) {
+                            return FlDotCirclePainter(
+                              radius: 4,
+                              color: const Color(0xFF7C3AED),
+                              strokeWidth: 2,
+                              strokeColor: Colors.white,
+                            );
+                          },
+                        ),
+                        belowBarData: BarAreaData(
+                          show: true,
+                          color: const Color(0xFF7C3AED).withOpacity(0.1),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                );
+              },
             ),
           ),
         ],
@@ -903,28 +925,25 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               ),
             ],
             ),
-            const SizedBox(height: 16),
+          const SizedBox(height: 16),
           ...usageData.take(5).map((app) {
             final percentage = totalScreenTime > 0
-                ? ((app.totalTimeInSeconds / totalScreenTime) * 100).round()
+                ? ((((app['usageTime'] as int) ~/ 1000) / totalScreenTime) * 100).round()
                 : 0;
             
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Row(
                 children: [
-                  Container(
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(6),
-                      color: _getAppColor(app.appName),
-                    ),
+                  _AppIconWidget(
+                    packageName: app['packageName'] as String,
+                    appName: app['appName'] as String,
+                    size: 24,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      app.appName,
+                      app['appName'] as String,
                       style: GoogleFonts.inter(
                         fontSize: 14,
                         color: Colors.white,
@@ -990,18 +1009,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(
               children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    color: const Color(0xFF7C3AED).withOpacity(0.2),
-                  ),
-                  child: const Icon(
-                    LucideIcons.smartphone,
-                    color: Color(0xFF7C3AED),
-                    size: 20,
-                  ),
+                _AppIconWidget(
+                  packageName: app['packageName'] as String,
+                  appName: app['name'] as String,
+                  size: 40,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1137,12 +1148,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     if (usageData.isEmpty) return 0;
     
     // Simple focus score calculation based on app diversity and total time
-    final productiveApps = usageData.where((app) => 
-      app.appName.toLowerCase().contains('chrome') ||
-      app.appName.toLowerCase().contains('notes') ||
-      app.appName.toLowerCase().contains('calendar') ||
-      app.appName.toLowerCase().contains('email')
-    ).length;
+    final productiveApps = usageData.where((app) {
+      final appName = app['appName'] as String;
+      return appName.toLowerCase().contains('chrome') ||
+        appName.toLowerCase().contains('notes') ||
+        appName.toLowerCase().contains('calendar') ||
+        appName.toLowerCase().contains('email');
+    }).length;
     
     final totalApps = usageData.length;
     final productiveRatio = totalApps > 0 ? productiveApps / totalApps : 0;
@@ -1168,17 +1180,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     return 'Low focus, consider blocking more apps';
   }
 
-  Color _getAppColor(String appName) {
-    if (appName.contains('Instagram')) return Colors.blueAccent;
-    if (appName.contains('YouTube')) return Colors.red;
-    if (appName.contains('Chrome')) return Colors.orange;
-    if (appName.contains('Discord')) return Colors.purple;
-    if (appName.contains('Spotify')) return Colors.green;
-    return Colors.teal;
-  }
 
   List<FlSpot> _generateWeeklyData() {
-    // Generate sample data for the week based on current usage
+    // This will be replaced with real data loading
     return List.generate(7, (index) {
       final baseHours = (totalScreenTime / 3600) / 7; // Distribute current usage across week
       final randomVariation = (index % 3 - 1) * 0.5;
@@ -1186,18 +1190,48 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     });
   }
 
+  // Load real weekly trend data
+  Future<List<FlSpot>> _loadWeeklyTrendData() async {
+    try {
+      final dailyData = await ScreenTimeService.getDailyUsageForTrend();
+      
+      if (dailyData.isEmpty) {
+        // Fallback to generated data if no real data available
+        return _generateWeeklyData();
+      }
+      
+      // Convert real daily data to chart spots
+      List<FlSpot> spots = [];
+      for (var day in dailyData) {
+        final dayNumber = day['day'] as int;
+        final totalHours = day['totalHours'] as double;
+        spots.add(FlSpot(dayNumber.toDouble(), totalHours));
+      }
+      
+      print('=== WEEKLY TREND CHART DATA ===');
+      for (int i = 0; i < spots.length; i++) {
+        print('Day ${i + 1}: ${spots[i].y.toStringAsFixed(2)} hours');
+      }
+      
+      return spots;
+    } catch (e) {
+      print('Error loading weekly trend data: $e');
+      return _generateWeeklyData();
+    }
+  }
+
   List<Map<String, dynamic>> _getTopApps() {
     return usageData.take(5).map((app) => {
-          'name': app.appName,
-          'packageName': app.packageName,
-          'time': _formatTime(app.totalTimeInSeconds),
+          'name': app['appName'] as String,
+          'packageName': app['packageName'] as String,
+          'time': _formatTime((app['usageTime'] as int) ~/ 1000), // Convert ms to seconds
         }).toList();
   }
 }
 
 // Circular chart painter for screen time visualization
 class CircularChartPainter extends CustomPainter {
-  final List<AppUsageData> usageData;
+  final List<Map<String, dynamic>> usageData;
   final int totalTime;
   final List<Color> colors = [
     Colors.blueAccent,
@@ -1227,12 +1261,12 @@ class CircularChartPainter extends CustomPainter {
 
     canvas.drawCircle(Offset(size.width / 2, size.height / 2), size.width / 2, backgroundPaint);
 
-    final List<AppUsageData> sortedData = usageData.where((d) => d.totalTimeInSeconds > 0).toList()
-      ..sort((a, b) => b.totalTimeInSeconds.compareTo(a.totalTimeInSeconds));
+    final List<Map<String, dynamic>> sortedData = usageData.where((d) => d['usageTime'] > 0).toList()
+      ..sort((a, b) => (b['usageTime'] as int).compareTo(a['usageTime'] as int));
 
     for (int i = 0; i < sortedData.take(5).length; i++) {
       final data = sortedData[i];
-      final double fraction = data.totalTimeInSeconds / totalTime;
+      final double fraction = ((data['usageTime'] as int) ~/ 1000) / totalTime; // Convert ms to seconds
       final double segmentAngle = sweepAngle * fraction;
 
       final Paint segmentPaint = Paint()
@@ -1256,6 +1290,192 @@ class CircularChartPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) {
     return true;
+  }
+}
+
+// Widget to display actual app icons
+class _AppIconWidget extends StatelessWidget {
+  final String packageName;
+  final String appName;
+  final double size;
+
+  const _AppIconWidget({
+    required this.packageName,
+    required this.appName,
+    required this.size,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(size * 0.2),
+        color: _getAppColor(appName).withOpacity(0.1),
+        border: Border.all(
+          color: _getAppColor(appName).withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Icon(
+        _getAppIcon(appName),
+        size: size * 0.6,
+        color: _getAppColor(appName),
+      ),
+    );
+  }
+
+
+  Color _getAppColor(String appName) {
+    if (appName.contains('Instagram')) return Colors.blueAccent;
+    if (appName.contains('YouTube')) return Colors.red;
+    if (appName.contains('Chrome')) return Colors.orange;
+    if (appName.contains('Discord')) return Colors.purple;
+    if (appName.contains('Spotify')) return Colors.green;
+    if (appName.contains('TikTok')) return Colors.black;
+    if (appName.contains('Facebook')) return Colors.blue;
+    if (appName.contains('Twitter')) return Colors.lightBlue;
+    if (appName.contains('Snapchat')) return Colors.yellow;
+    if (appName.contains('WhatsApp')) return Colors.green;
+    if (appName.contains('Telegram')) return Colors.blue;
+    if (appName.contains('Netflix')) return Colors.red;
+    if (appName.contains('Gmail')) return Colors.red;
+    if (appName.contains('Maps')) return Colors.green;
+    if (appName.contains('Photos')) return Colors.blue;
+    if (appName.contains('Calendar')) return Colors.blue;
+    if (appName.contains('Drive')) return Colors.blue;
+    if (appName.contains('Zoom')) return Colors.blue;
+    if (appName.contains('Slack')) return Colors.purple;
+    if (appName.contains('Uber')) return Colors.black;
+    if (appName.contains('Airbnb')) return Colors.red;
+    if (appName.contains('Pinterest')) return Colors.red;
+    if (appName.contains('Reddit')) return Colors.orange;
+    if (appName.contains('LinkedIn')) return Colors.blue;
+    if (appName.contains('GitHub')) return Colors.black;
+    if (appName.contains('Medium')) return Colors.black;
+    if (appName.contains('Quora')) return Colors.red;
+    if (appName.contains('Tumblr')) return Colors.blue;
+    if (appName.contains('Flickr')) return Colors.pink;
+    if (appName.contains('VSCO')) return Colors.black;
+    if (appName.contains('Lightroom')) return Colors.purple;
+    if (appName.contains('Snapseed')) return Colors.blue;
+    if (appName.contains('Canva')) return Colors.blue;
+    if (appName.contains('Adobe')) return Colors.red;
+    if (appName.contains('Kindle')) return Colors.orange;
+    if (appName.contains('Audible')) return Colors.orange;
+    if (appName.contains('Podcasts')) return Colors.purple;
+    if (appName.contains('SoundCloud')) return Colors.orange;
+    if (appName.contains('Pandora')) return Colors.pink;
+    if (appName.contains('iHeartRadio')) return Colors.red;
+    if (appName.contains('Fitness')) return Colors.green;
+    if (appName.contains('Strava')) return Colors.orange;
+    if (appName.contains('Nike')) return Colors.black;
+    if (appName.contains('Stack')) return Colors.orange;
+    if (appName.contains('Teams')) return Colors.blue;
+    if (appName.contains('Skype')) return Colors.blue;
+    if (appName.contains('Trello')) return Colors.blue;
+    if (appName.contains('Notion')) return Colors.black;
+    if (appName.contains('Evernote')) return Colors.green;
+    if (appName.contains('Keep')) return Colors.yellow;
+    if (appName.contains('Duo')) return Colors.blue;
+    if (appName.contains('Messages')) return Colors.green;
+    if (appName.contains('Firefox')) return Colors.orange;
+    if (appName.contains('Opera')) return Colors.red;
+    if (appName.contains('Edge')) return Colors.blue;
+    if (appName.contains('Samsung')) return Colors.blue;
+    if (appName.contains('Books')) return Colors.orange;
+    if (appName.contains('Meet')) return Colors.green;
+    if (appName.contains('Translate')) return Colors.blue;
+    if (appName.contains('Docs')) return Colors.blue;
+    if (appName.contains('Excel')) return Colors.green;
+    if (appName.contains('Word')) return Colors.blue;
+    if (appName.contains('PowerPoint')) return Colors.orange;
+    if (appName.contains('DoorDash')) return Colors.red;
+    if (appName.contains('Grubhub')) return Colors.orange;
+    if (appName.contains('Booking')) return Colors.blue;
+    if (appName.contains('Layout')) return Colors.purple;
+    if (appName.contains('Boomerang')) return Colors.blue;
+    if (appName.contains('Hyperlapse')) return Colors.purple;
+    
+    return Colors.teal;
+  }
+
+  IconData _getAppIcon(String appName) {
+    final lowerName = appName.toLowerCase();
+    
+    if (lowerName.contains('tiktok')) return LucideIcons.music;
+    if (lowerName.contains('instagram')) return LucideIcons.camera;
+    if (lowerName.contains('youtube')) return LucideIcons.play;
+    if (lowerName.contains('facebook')) return LucideIcons.facebook;
+    if (lowerName.contains('twitter')) return LucideIcons.twitter;
+    if (lowerName.contains('snapchat')) return LucideIcons.camera;
+    if (lowerName.contains('whatsapp')) return LucideIcons.messageCircle;
+    if (lowerName.contains('telegram')) return LucideIcons.send;
+    if (lowerName.contains('discord')) return LucideIcons.messageSquare;
+    if (lowerName.contains('spotify')) return LucideIcons.music;
+    if (lowerName.contains('netflix')) return LucideIcons.tv;
+    if (lowerName.contains('chrome')) return LucideIcons.globe;
+    if (lowerName.contains('gmail')) return LucideIcons.mail;
+    if (lowerName.contains('maps')) return LucideIcons.mapPin;
+    if (lowerName.contains('photos')) return LucideIcons.image;
+    if (lowerName.contains('calendar')) return LucideIcons.calendar;
+    if (lowerName.contains('drive')) return LucideIcons.folder;
+    if (lowerName.contains('zoom')) return LucideIcons.video;
+    if (lowerName.contains('slack')) return LucideIcons.messageSquare;
+    if (lowerName.contains('uber')) return LucideIcons.car;
+    if (lowerName.contains('airbnb')) return LucideIcons.home;
+    if (lowerName.contains('pinterest')) return LucideIcons.pin;
+    if (lowerName.contains('reddit')) return LucideIcons.messageCircle;
+    if (lowerName.contains('linkedin')) return LucideIcons.linkedin;
+    if (lowerName.contains('github')) return LucideIcons.github;
+    if (lowerName.contains('medium')) return LucideIcons.bookOpen;
+    if (lowerName.contains('quora')) return LucideIcons.helpCircle;
+    if (lowerName.contains('tumblr')) return LucideIcons.messageSquare;
+    if (lowerName.contains('flickr')) return LucideIcons.image;
+    if (lowerName.contains('vsco')) return LucideIcons.camera;
+    if (lowerName.contains('lightroom')) return LucideIcons.image;
+    if (lowerName.contains('snapseed')) return LucideIcons.image;
+    if (lowerName.contains('canva')) return LucideIcons.palette;
+    if (lowerName.contains('adobe')) return LucideIcons.image;
+    if (lowerName.contains('kindle')) return LucideIcons.book;
+    if (lowerName.contains('audible')) return LucideIcons.headphones;
+    if (lowerName.contains('podcasts')) return LucideIcons.podcast;
+    if (lowerName.contains('soundcloud')) return LucideIcons.music;
+    if (lowerName.contains('pandora')) return LucideIcons.music;
+    if (lowerName.contains('iheartradio')) return LucideIcons.radio;
+    if (lowerName.contains('fitness')) return LucideIcons.activity;
+    if (lowerName.contains('strava')) return LucideIcons.activity;
+    if (lowerName.contains('nike')) return LucideIcons.activity;
+    if (lowerName.contains('stack')) return LucideIcons.code;
+    if (lowerName.contains('teams')) return LucideIcons.users;
+    if (lowerName.contains('skype')) return LucideIcons.video;
+    if (lowerName.contains('trello')) return LucideIcons.trello;
+    if (lowerName.contains('notion')) return LucideIcons.fileText;
+    if (lowerName.contains('evernote')) return LucideIcons.fileText;
+    if (lowerName.contains('keep')) return LucideIcons.stickyNote;
+    if (lowerName.contains('duo')) return LucideIcons.video;
+    if (lowerName.contains('messages')) return LucideIcons.messageCircle;
+    if (lowerName.contains('firefox')) return LucideIcons.globe;
+    if (lowerName.contains('opera')) return LucideIcons.globe;
+    if (lowerName.contains('edge')) return LucideIcons.globe;
+    if (lowerName.contains('samsung')) return LucideIcons.globe;
+    if (lowerName.contains('books')) return LucideIcons.book;
+    if (lowerName.contains('meet')) return LucideIcons.video;
+    if (lowerName.contains('translate')) return LucideIcons.languages;
+    if (lowerName.contains('docs')) return LucideIcons.fileText;
+    if (lowerName.contains('excel')) return LucideIcons.table;
+    if (lowerName.contains('word')) return LucideIcons.fileText;
+    if (lowerName.contains('powerpoint')) return LucideIcons.presentation;
+    if (lowerName.contains('doordash')) return LucideIcons.truck;
+    if (lowerName.contains('grubhub')) return LucideIcons.truck;
+    if (lowerName.contains('booking')) return LucideIcons.bed;
+    if (lowerName.contains('layout')) return LucideIcons.layout;
+    if (lowerName.contains('boomerang')) return LucideIcons.rotateCcw;
+    if (lowerName.contains('hyperlapse')) return LucideIcons.fastForward;
+    
+    // Default icon for unknown apps
+    return LucideIcons.smartphone;
   }
 }
 

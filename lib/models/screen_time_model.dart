@@ -110,6 +110,15 @@ class ScreenTimeModel extends ChangeNotifier {
 
   // Add app usage
   Future<void> addAppUsage(String packageName, String appName, Duration usageTime, String category) async {
+    // Check if we already have usage for this app today
+    final today = DateTime.now();
+    final todayStart = DateTime(today.year, today.month, today.day);
+    
+    // Remove existing usage for this app today to avoid duplicates
+    _dailyUsage.removeWhere((usage) => 
+        usage.packageName == packageName && 
+        usage.date.isAfter(todayStart));
+    
     final usage = AppUsage(
       packageName: packageName,
       appName: appName,
@@ -254,6 +263,53 @@ class ScreenTimeModel extends ChangeNotifier {
     
     final productiveTime = _categoryUsage['Productivity'] ?? Duration.zero;
     return productiveTime.inMinutes / _totalScreenTime.inMinutes;
+  }
+
+  // Refresh data from real usage stats
+  Future<void> refreshFromRealUsageStats() async {
+    try {
+      // This will be called by the service to update with real data
+      _calculateAnalytics();
+      notifyListeners();
+    } catch (e) {
+      print('Error refreshing from real usage stats: $e');
+    }
+  }
+
+  // Get usage stats for a specific period
+  Map<String, dynamic> getUsageStatsForPeriod(Duration period) {
+    final cutoffDate = DateTime.now().subtract(period);
+    final periodUsage = _dailyUsage.where((usage) => usage.date.isAfter(cutoffDate)).toList();
+    
+    Duration totalTime = Duration.zero;
+    Map<String, Duration> categoryBreakdown = {};
+    Map<String, Duration> appBreakdown = {};
+    
+    for (final usage in periodUsage) {
+      totalTime += usage.usageTime;
+      
+      // Category breakdown
+      if (categoryBreakdown.containsKey(usage.category)) {
+        categoryBreakdown[usage.category] = categoryBreakdown[usage.category]! + usage.usageTime;
+      } else {
+        categoryBreakdown[usage.category] = usage.usageTime;
+      }
+      
+      // App breakdown
+      if (appBreakdown.containsKey(usage.appName)) {
+        appBreakdown[usage.appName] = appBreakdown[usage.appName]! + usage.usageTime;
+      } else {
+        appBreakdown[usage.appName] = usage.usageTime;
+      }
+    }
+    
+    return {
+      'totalTime': totalTime,
+      'categoryBreakdown': categoryBreakdown,
+      'appBreakdown': appBreakdown,
+      'period': period,
+      'usageCount': periodUsage.length,
+    };
   }
 
   // Reset data
