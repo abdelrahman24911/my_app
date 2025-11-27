@@ -9,6 +9,7 @@ import 'models/auth_model.dart';
 import 'models/parental_control_model.dart';
 import 'models/screen_time_model.dart';
 import 'models/sleep_model.dart';
+import 'models/step_counter_model.dart';
 import 'screens/challenges_screen.dart';
 import 'screens/community_screen.dart';
 import 'screens/home_screen.dart';
@@ -18,6 +19,7 @@ import 'screens/parental_control_screen.dart';
 import 'screens/analytics_screen.dart';
 import 'screens/mini_games_screen.dart';
 import 'screens/sleep_tracking_screen.dart';
+import 'screens/step_counter_screen.dart';
 import 'services/screen_time_service.dart';
 
 void main() {
@@ -46,6 +48,7 @@ class MindQuestApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => MissionsModel()),
         ChangeNotifierProvider(create: (_) => ParentalControlModel()),
         ChangeNotifierProvider(create: (_) => SleepModel()),
+        ChangeNotifierProvider(create: (_) => StepCounterModel()),
         ChangeNotifierProvider(create: (_) {
           final screenTimeModel = ScreenTimeModel();
           // Initialize the screen time service
@@ -96,6 +99,7 @@ class _RootNavState extends State<RootNav> {
     ChallengesScreen(),
     MiniGamesScreen(),
     SleepTrackingScreen(),
+    StepCounterScreen(),
     CommunityScreen(),
     AnalyticsScreen(),
     ParentalControlScreen(),
@@ -122,6 +126,7 @@ class _RootNavState extends State<RootNav> {
           BottomNavigationBarItem(icon: Icon(LucideIcons.target), label: 'Challenges'),
           BottomNavigationBarItem(icon: Icon(LucideIcons.gamepad2), label: 'Games'),
           BottomNavigationBarItem(icon: Icon(LucideIcons.moon), label: 'Sleep'),
+          BottomNavigationBarItem(icon: Icon(LucideIcons.footprints), label: 'Steps'),
           BottomNavigationBarItem(icon: Icon(LucideIcons.users), label: 'Community'),
           BottomNavigationBarItem(icon: Icon(LucideIcons.barChart3), label: 'Analytics'),
           BottomNavigationBarItem(icon: Icon(LucideIcons.shield), label: 'Parental'),
