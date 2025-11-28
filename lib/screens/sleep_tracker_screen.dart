@@ -6,6 +6,7 @@ import 'package:fl_chart/fl_chart.dart';
 import '../models/sleep_session.dart';
 import '../services/sleep_service.dart';
 import '../constants/app_colors.dart';
+import '../main.dart';
 
 class SleepTrackerScreen extends StatefulWidget {
   const SleepTrackerScreen({super.key});
@@ -88,11 +89,14 @@ class _SleepTrackerScreenState extends State<SleepTrackerScreen> {
         ),
         leading: IconButton(
           icon: const Icon(
-            LucideIcons.moon,
-            color: AppColors.purple,
-            size: 28,
+            LucideIcons.menu,
+            color: Colors.white,
+            size: 24,
           ),
-          onPressed: () {},
+          onPressed: () {
+            rootNavScaffoldKey.currentState?.openDrawer();
+          },
+          tooltip: 'Menu',
         ),
       ),
       body: _isLoading

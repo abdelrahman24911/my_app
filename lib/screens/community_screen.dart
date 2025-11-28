@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import '../main.dart';
 
 class CommunityScreen extends StatelessWidget {
   const CommunityScreen({super.key});
@@ -23,11 +24,14 @@ class CommunityScreen extends StatelessWidget {
         ),
         leading: IconButton(
           icon: const Icon(
-            LucideIcons.users,
-            color: Color(0xFF7C3AED),
-            size: 28,
+            LucideIcons.menu,
+            color: Colors.white,
+            size: 24,
           ),
-          onPressed: () {},
+          onPressed: () {
+            rootNavScaffoldKey.currentState?.openDrawer();
+          },
+          tooltip: 'Menu',
         ),
         actions: [
           Container(

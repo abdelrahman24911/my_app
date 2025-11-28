@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../models/auth_model.dart';
 import '../models/user_model.dart';
+import '../main.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -26,11 +27,14 @@ class ProfileScreen extends StatelessWidget {
         ),
         leading: IconButton(
           icon: const Icon(
-            LucideIcons.user,
-            color: Color(0xFF7C3AED),
-            size: 28,
+            LucideIcons.menu,
+            color: Colors.white,
+            size: 24,
           ),
-          onPressed: () {},
+          onPressed: () {
+            rootNavScaffoldKey.currentState?.openDrawer();
+          },
+          tooltip: 'Menu',
         ),
       ),
       body: Consumer2<AuthModel, UserModel>(

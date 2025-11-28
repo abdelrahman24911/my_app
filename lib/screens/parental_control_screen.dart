@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../models/parental_control_model.dart';
+import '../main.dart';
 
 class ParentalControlScreen extends StatefulWidget {
   const ParentalControlScreen({super.key});
@@ -96,11 +97,14 @@ class _ParentalControlScreenState extends State<ParentalControlScreen> {
         ),
         leading: IconButton(
           icon: const Icon(
-            LucideIcons.shield,
-            color: Color(0xFF4CAF50),
-            size: 28,
+            LucideIcons.menu,
+            color: Colors.white,
+            size: 24,
           ),
-          onPressed: () {},
+          onPressed: () {
+            rootNavScaffoldKey.currentState?.openDrawer();
+          },
+          tooltip: 'Menu',
         ),
       ),
       body: Consumer<ParentalControlModel>(

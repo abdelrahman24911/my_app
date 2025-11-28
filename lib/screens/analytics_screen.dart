@@ -6,6 +6,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/services.dart';
 import '../services/screen_time_service.dart';
+import '../main.dart';
 
 
 class AnalyticsScreen extends StatefulWidget {
@@ -237,6 +238,17 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF1B1B1B),
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(
+            LucideIcons.menu,
+            color: Colors.white,
+            size: 24,
+          ),
+          onPressed: () {
+            rootNavScaffoldKey.currentState?.openDrawer();
+          },
+          tooltip: 'Menu',
+        ),
         title: Text(
           'Screen Time Analytics',
           style: GoogleFonts.inter(
@@ -260,14 +272,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             tooltip: 'Refresh Data',
           ),
         ],
-        leading: IconButton(
-          icon: const Icon(
-            LucideIcons.barChart3,
-            color: Color(0xFF7C3AED),
-            size: 28,
-          ),
-          onPressed: () {},
-        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),

@@ -1,0 +1,101 @@
+// lib/screens/security_screen.dart
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../models/auth_model.dart';
+
+class SecurityScreen extends StatefulWidget {
+  const SecurityScreen({super.key});
+  @override
+  State<SecurityScreen> createState() => _SecurityScreenState();
+}
+
+class _SecurityScreenState extends State<SecurityScreen> {
+  @override
+  Widget build(BuildContext context) {
+    final auth = Provider.of<AuthModel>(context);
+    final email = auth.userEmail;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Security'),
+        backgroundColor: const Color(0xFF1B1B1B),
+        foregroundColor: Colors.white,
+      ),
+      backgroundColor: const Color(0xFF1B1B1B),
+      body: email == null 
+        ? const Center(
+            child: Text(
+              'Not signed in',
+              style: TextStyle(color: Colors.white),
+            ),
+          )
+        : Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: const [
+                    Icon(Icons.lock, color: Colors.green),
+                    SizedBox(width: 8),
+                    Text(
+                      'Data encrypted',
+                      style: TextStyle(color: Colors.green),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Email: $email',
+                  style: const TextStyle(color: Colors.white70),
+                ),
+                const SizedBox(height: 16),
+                SwitchListTile(
+                  title: const Text(
+                    'Enable 2FA (email OTP)',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  subtitle: const Text(
+                    'Coming soon',
+                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                  value: false,
+                  onChanged: null,
+                ),
+                SwitchListTile(
+                  title: const Text(
+                    'Enable biometric login',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  subtitle: const Text(
+                    'Coming soon',
+                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                  value: false,
+                  onChanged: null,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () async {
+                    final success = await auth.sendPasswordResetEmail(email);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            success
+                                ? 'Password reset email sent!'
+                                : 'Failed to send reset email',
+                          ),
+                          backgroundColor: success ? Colors.green : Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  child: const Text('Request password reset (email)'),
+                ),
+              ],
+            ),
+          ),
+    );
+  }
+}
+

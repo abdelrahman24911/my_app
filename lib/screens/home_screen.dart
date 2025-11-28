@@ -5,6 +5,8 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../models/mission_model.dart';
 import '../models/user_model.dart';
+import '../main.dart';
+import 'focus_blocking_screen.dart';
 
 // Helper class to hold selected data for minimal rebuilds
 class _HomeScreenData {
@@ -56,6 +58,17 @@ class _HomeScreenState extends State<HomeScreen> {
         appBar: AppBar(
         backgroundColor: const Color(0xFF1B1B1B),
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(
+            LucideIcons.menu,
+            color: Colors.white,
+            size: 24,
+          ),
+          onPressed: () {
+            rootNavScaffoldKey.currentState?.openDrawer();
+          },
+          tooltip: 'Menu',
+        ),
         title: Text(
           'MindQuest',
           style: GoogleFonts.inter(
@@ -116,6 +129,36 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   children: [
                     ...missions.map((m) => _buildMissionCard(m)).toList(),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              
+              // Focus & Blocking Section
+              _buildSectionCard(
+                title: 'Focus & Blocking',
+                icon: LucideIcons.shield,
+                child: Column(
+                  children: [
+                    _buildFeatureButton(
+                      icon: LucideIcons.shield,
+                      title: 'Smart Blocking',
+                      subtitle: 'Block apps & adult content automatically',
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const FocusBlockingScreen()),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildFeatureButton(
+                      icon: LucideIcons.focus,
+                      title: 'Focus Mode',
+                      subtitle: 'Start a focused work session',
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const FocusBlockingScreen()),
+                      ),
+                    ),
                   ],
                 ),
               ),

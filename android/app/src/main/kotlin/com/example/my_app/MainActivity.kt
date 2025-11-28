@@ -4,274 +4,129 @@ import android.app.Activity
 import android.app.AppOpsManager
 import android.app.admin.DeviceAdminReceiver
 import android.app.admin.DevicePolicyManager
+import android.app.usage.UsageStatsManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
+import android.graphics.Color
 import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.Process
 import android.provider.Settings
+import android.util.Log
+import android.view.Gravity
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.NonNull
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import android.os.Process
-import android.util.Log
-import android.os.Handler
-import android.os.Looper
-import android.view.WindowManager
-import android.graphics.Color
-import android.view.Gravity
-import android.widget.LinearLayout
-import android.widget.TextView
-import android.app.usage.UsageStatsManager
-import android.content.pm.PackageManager
-import java.util.*
+import java.util.Calendar
 
-// MethodChannel name - MUST match the one in home_screen.dart
 private const val CHANNEL = "com.appguard.native_calls"
 private const val TAG = "AdminChecker"
 
-// Warning Activity for Admin Disable Protection
-class WarningActivity : Activity() {
-    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+class MainActivity : FlutterActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Full screen settings
-        window.addFlags(
-            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-            WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-        )
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_FULLSCREEN,
-            WindowManager.LayoutParams.FLAG_FULLSCREEN
-        )
+        if (!checkDeviceAdminActive(this)) {
+            requestDeviceAdminPermission(this)
+        }
+    }
 
-        // Create warning UI
+    private fun showAdminWarning() {
+        val scrollView = ScrollView(this)
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setBackgroundColor(Color.parseColor("#E53935"))
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.MATCH_PARENT
-            )
-        }
-
-        val textView = TextView(this).apply {
-            text = "🛑 Security Alert!\nThis warning will close in 8 seconds."
-            textSize = 24f
-            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.RED)
             gravity = Gravity.CENTER
             setPadding(50, 50, 50, 50)
         }
 
-        layout.addView(textView)
-        setContentView(layout)
+        val warningText = TextView(this).apply {
+            text = """
+                ⚠️ Security Notice! ⚠️
 
-        // Auto-close after 8 seconds
-        Handler(Looper.getMainLooper()).postDelayed({
-            finish()
-        }, 8000)
-    }
-}
-
-// Device Admin Receiver
-class DeviceAdminReceiver : android.app.admin.DeviceAdminReceiver() {
-    override fun onDisableRequested(context: Context, intent: Intent): CharSequence? {
-        // Show warning activity
-        try {
-            val warningIntent = Intent(context, WarningActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            }
-            context.startActivity(warningIntent)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to launch WarningActivity: ${e.message}")
+                You must enable Device Admin to use this application.
+                Attempting to bypass may cause automatic corrective actions.
+            """.trimIndent()
+            textSize = 20f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
         }
 
-        // Restart app
-        try {
-            val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-            launchIntent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            context.startActivity(launchIntent)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to launch app after disable request: ${e.message}")
-        }
-
-        return "⛔CANNOT DISABLE THIS OPTION!"
+        layout.addView(warningText)
+        scrollView.addView(layout)
+        setContentView(scrollView)
     }
 
-    override fun onEnabled(context: Context, intent: Intent) {
-        super.onEnabled(context, intent)
-        Toast.makeText(context, "Device Admin Enabled!", Toast.LENGTH_SHORT).show()
-    }
-
-    override fun onDisabled(context: Context, intent: Intent) {
-        super.onDisabled(context, intent)
-        Toast.makeText(context, "Device Admin Disabled!", Toast.LENGTH_SHORT).show()
-    }
-}
-
-class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
-                // Check Device Admin status
-                "isAdminActive" -> {
-                    val isActive = checkDeviceAdminActive(this)
-                    result.success(isActive)
-                }
-                // Request Device Admin permission
+                "isAdminActive" -> result.success(checkDeviceAdminActive(this))
                 "requestAdminPermission" -> {
                     requestDeviceAdminPermission(this)
                     result.success(true)
                 }
-                // Request Usage Access permission
                 "requestUsagePermission" -> {
                     requestUsageAccessPermission(this)
                     result.success(true)
                 }
-                // Check Usage Access permission
-                "hasUsagePermission" -> {
-                    result.success(hasUsageAccessPermission(this))
-                }
-                // Request Overlay permission
-                "requestOverlayPermission" -> {
-                    requestOverlayPermission(this)
-                    result.success(true)
-                }
-                // Check Overlay permission
-                "hasOverlayPermission" -> {
-                    result.success(hasOverlayPermission(this))
-                }
-                // Validate usage data accuracy
-                "validateUsageData" -> {
-                    try {
-                        val validationResult = validateUsageDataAccuracy(this)
-                        result.success(validationResult)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error validating usage data: ${e.message}")
-                        result.error("VALIDATION_ERROR", "Failed to validate usage data.", e.message)
-                    }
-                }
-                // Get usage statistics
+                "hasUsagePermission" -> result.success(hasUsageAccessPermission(this))
                 "getUsageStats" -> {
                     try {
-                        val usageStatsList = getUsageStats(this)
-                        result.success(usageStatsList)
+                        result.success(getUsageStats(this))
                     } catch (e: Exception) {
-                        Log.e(TAG, "Error fetching usage stats: ${e.message}")
+                        Log.e(TAG, "Usage stats error: ${e.message}")
                         result.error("USAGE_ERROR", "Failed to retrieve usage stats.", e.message)
                     }
                 }
-                // Get weekly usage statistics
-                "getWeeklyUsageStats" -> {
-                    try {
-                        val usageStatsList = getWeeklyUsageStats(this)
-                        result.success(usageStatsList)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error fetching weekly usage stats: ${e.message}")
-                        result.error("USAGE_ERROR", "Failed to retrieve weekly usage stats.", e.message)
-                    }
-                }
-                // Get monthly usage statistics
-                "getMonthlyUsageStats" -> {
-                    try {
-                        val usageStatsList = getMonthlyUsageStats(this)
-                        result.success(usageStatsList)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error fetching monthly usage stats: ${e.message}")
-                        result.error("USAGE_ERROR", "Failed to retrieve monthly usage stats.", e.message)
-                    }
-                }
-                // Get 3 months usage statistics
-                "get3MonthsUsageStats" -> {
-                    try {
-                        val usageStatsList = get3MonthsUsageStats(this)
-                        result.success(usageStatsList)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error fetching 3 months usage stats: ${e.message}")
-                        result.error("USAGE_ERROR", "Failed to retrieve 3 months usage stats.", e.message)
-                    }
-                }
-                // Get 6 months usage statistics
-                "get6MonthsUsageStats" -> {
-                    try {
-                        val usageStatsList = get6MonthsUsageStats(this)
-                        result.success(usageStatsList)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error fetching 6 months usage stats: ${e.message}")
-                        result.error("USAGE_ERROR", "Failed to retrieve 6 months usage stats.", e.message)
-                    }
-                }
-                // Get 1 year usage statistics
-                "get1YearUsageStats" -> {
-                    try {
-                        val usageStatsList = get1YearUsageStats(this)
-                        result.success(usageStatsList)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error fetching 1 year usage stats: ${e.message}")
-                        result.error("USAGE_ERROR", "Failed to retrieve 1 year usage stats.", e.message)
-                    }
-                }
-                // Block app (placeholder)
                 "blockApp" -> {
                     val appName = call.argument<String>("appName")
-                    Toast.makeText(this, "Block logic initiated for: $appName", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "Block logic initiated for: $appName (service required)", Toast.LENGTH_LONG).show()
                     result.success(true)
                 }
-                "getInstalledApps" -> {
-                    try {
-                        val appsList = getInstalledApps()
-                        result.success(appsList)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error getting installed apps: ${e.message}")
-                        result.error("APPS_ERROR", "Failed to get installed apps.", e.message)
-                    }
-                }
-                else -> {
-                    result.notImplemented()
-                }
+                else -> result.notImplemented()
             }
         }
     }
 
-    // Check Device Admin status
     private fun checkDeviceAdminActive(context: Context): Boolean {
         val devicePolicyManager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-        val componentName = ComponentName(context, DeviceAdminReceiver::class.java)
+        val componentName = ComponentName(context, AdminReceiver::class.java)
         return devicePolicyManager.isAdminActive(componentName)
     }
 
-    // Request Device Admin permission
     private fun requestDeviceAdminPermission(context: Context) {
-        try {
-            val componentName = ComponentName(context, DeviceAdminReceiver::class.java)
-            val devicePolicyManager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        val componentName = ComponentName(context, AdminReceiver::class.java)
+        val devicePolicyManager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
 
-            if (!devicePolicyManager.isAdminActive(componentName)) {
-                val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
-                intent.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, componentName)
-                intent.putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "This permission prevents unauthorized uninstallation and tampering.")
-                context.startActivity(intent)
-            } else {
-                Toast.makeText(context, "Device Admin already enabled.", Toast.LENGTH_SHORT).show()
+        if (!devicePolicyManager.isAdminActive(componentName)) {
+            val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
+                putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, componentName)
+                putExtra(
+                    DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                    "⚠️ You must enable this permission to use the app."
+                )
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to request device admin: ${e.message}")
-            Toast.makeText(context, "Failed to open Device Admin settings.", Toast.LENGTH_LONG).show()
+            startActivity(intent)
+        } else {
+            Toast.makeText(context, "Device Admin already enabled.", Toast.LENGTH_SHORT).show()
         }
     }
 
-    // Request Usage Access permission
     private fun requestUsageAccessPermission(context: Context) {
         if (!hasUsageAccessPermission(context)) {
             try {
-                val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
-                context.startActivity(intent)
+                startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
             } catch (e: Exception) {
                 Toast.makeText(context, "Cannot open Usage Access settings.", Toast.LENGTH_LONG).show()
             }
@@ -280,7 +135,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // Check Usage Access permission
     private fun hasUsageAccessPermission(context: Context): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
@@ -294,189 +148,17 @@ class MainActivity : FlutterActivity() {
         return false
     }
 
-    // Request Overlay Permission
-    private fun requestOverlayPermission(context: Context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (!Settings.canDrawOverlays(context)) {
-                try {
-                    val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
-                    intent.data = Uri.parse("package:${context.packageName}")
-                    context.startActivity(intent)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to open overlay permission settings: ${e.message}")
-                    Toast.makeText(context, "Cannot open Overlay Permission settings.", Toast.LENGTH_LONG).show()
-                }
-            } else {
-                Toast.makeText(context, "Overlay Permission already granted.", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    // Check Overlay Permission
-    private fun hasOverlayPermission(context: Context): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            Settings.canDrawOverlays(context)
-        } else {
-            true
-        }
-    }
-
-    // Get usage statistics for the last 24 hours
     private fun getUsageStats(context: Context): List<Map<String, Any>> {
-        if (!hasUsageAccessPermission(context)) {
-            Log.w(TAG, "Usage access permission not granted")
-            return emptyList()
-        }
+        if (!hasUsageAccessPermission(context)) return emptyList()
 
         val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val packageManager = context.packageManager
-
-        // Get stats for last 24 hours with more precise timing
         val calendar = Calendar.getInstance()
         val endTime = System.currentTimeMillis()
-        calendar.add(Calendar.HOUR_OF_DAY, -24) // More precise: 24 hours ago
+        calendar.add(Calendar.DAY_OF_YEAR, -1)
         val startTime = calendar.timeInMillis
 
-        Log.d(TAG, "Querying usage stats from $startTime to $endTime")
-
-        val stats = usageStatsManager.queryUsageStats(
-            UsageStatsManager.INTERVAL_DAILY,
-            startTime,
-            endTime
-        )
-
-        val usageList = mutableListOf<Map<String, Any>>()
-        val appUsageMap = mutableMapOf<String, Long>() // Aggregate usage by package
-
-        // Aggregate usage data to avoid duplicates and get more accurate totals
-        stats?.forEach { usageStats ->
-            if (usageStats.totalTimeInForeground > 0) {
-                val packageName = usageStats.packageName
-                val currentTime = appUsageMap[packageName] ?: 0L
-                appUsageMap[packageName] = currentTime + usageStats.totalTimeInForeground
-            }
-        }
-
-        // Convert aggregated data to final format
-        appUsageMap.forEach { (packageName, totalTime) ->
-            try {
-                val appInfo = packageManager.getApplicationInfo(packageName, 0)
-                val appName = packageManager.getApplicationLabel(appInfo).toString()
-                val totalTimeInSeconds = (totalTime / 1000).toInt()
-
-                // Filter out system apps and very short usage times
-                if (totalTimeInSeconds >= 1 && !isSystemApp(packageName)) {
-                    val usageMap = mapOf(
-                        "appName" to appName,
-                        "packageName" to packageName,
-                        "totalTimeInSeconds" to totalTimeInSeconds
-                    )
-                    usageList.add(usageMap)
-                    Log.d(TAG, "App: $appName, Time: ${totalTimeInSeconds}s")
-                }
-            } catch (e: PackageManager.NameNotFoundException) {
-                Log.w(TAG, "Package not found: $packageName")
-            }
-        }
-
-        Log.d(TAG, "Total apps with usage: ${usageList.size}")
-        return usageList.sortedByDescending { it["totalTimeInSeconds"] as Int }
-    }
-
-    // Helper function to identify system apps
-    private fun isSystemApp(packageName: String): Boolean {
-        val systemApps = listOf(
-            "android",
-            "com.android.systemui",
-            "com.android.settings",
-            "com.android.launcher",
-            "com.google.android.gms",
-            "com.google.android.gsf"
-        )
-        return systemApps.any { packageName.startsWith(it) }
-    }
-
-    // Get usage statistics for the last 7 days
-    private fun getWeeklyUsageStats(context: Context): List<Map<String, Any>> {
-        if (!hasUsageAccessPermission(context)) {
-            Log.w(TAG, "Usage access permission not granted")
-            return emptyList()
-        }
-
-        val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        val packageManager = context.packageManager
-
-        // Get stats for last 7 days with more precise timing
-        val calendar = Calendar.getInstance()
-        val endTime = System.currentTimeMillis()
-        calendar.add(Calendar.DAY_OF_YEAR, -7)
-        val startTime = calendar.timeInMillis
-
-        Log.d(TAG, "Querying weekly usage stats from $startTime to $endTime")
-
-        val stats = usageStatsManager.queryUsageStats(
-            UsageStatsManager.INTERVAL_WEEKLY,
-            startTime,
-            endTime
-        )
-
-        val usageList = mutableListOf<Map<String, Any>>()
-        val appUsageMap = mutableMapOf<String, Long>()
-
-        // Aggregate usage data
-        stats?.forEach { usageStats ->
-            if (usageStats.totalTimeInForeground > 0) {
-                val packageName = usageStats.packageName
-                val currentTime = appUsageMap[packageName] ?: 0L
-                appUsageMap[packageName] = currentTime + usageStats.totalTimeInForeground
-            }
-        }
-
-        // Convert aggregated data to final format
-        appUsageMap.forEach { (packageName, totalTime) ->
-            try {
-                val appInfo = packageManager.getApplicationInfo(packageName, 0)
-                val appName = packageManager.getApplicationLabel(appInfo).toString()
-                val totalTimeInSeconds = (totalTime / 1000).toInt()
-
-                if (totalTimeInSeconds >= 5 && !isSystemApp(packageName)) {
-                    val usageMap = mapOf(
-                        "appName" to appName,
-                        "packageName" to packageName,
-                        "totalTimeInSeconds" to totalTimeInSeconds
-                    )
-                    usageList.add(usageMap)
-                }
-            } catch (e: PackageManager.NameNotFoundException) {
-                Log.w(TAG, "Package not found: $packageName")
-            }
-        }
-
-        Log.d(TAG, "Weekly total apps with usage: ${usageList.size}")
-        return usageList.sortedByDescending { it["totalTimeInSeconds"] as Int }
-    }
-
-    // Get usage statistics for the last 30 days
-    private fun getMonthlyUsageStats(context: Context): List<Map<String, Any>> {
-        if (!hasUsageAccessPermission(context)) {
-            return emptyList()
-        }
-
-        val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        val packageManager = context.packageManager
-
-        // Get stats for last 30 days
-        val calendar = Calendar.getInstance()
-        val endTime = System.currentTimeMillis()
-        calendar.add(Calendar.DAY_OF_YEAR, -30)
-        val startTime = calendar.timeInMillis
-
-        val stats = usageStatsManager.queryUsageStats(
-            UsageStatsManager.INTERVAL_MONTHLY,
-            startTime,
-            endTime
-        )
-
+        val stats = usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime)
         val usageList = mutableListOf<Map<String, Any>>()
 
         stats?.filter { it.totalTimeInForeground > 0 }?.forEach { usageStats ->
@@ -486,277 +168,129 @@ class MainActivity : FlutterActivity() {
                 val appName = packageManager.getApplicationLabel(appInfo).toString()
                 val totalTimeInSeconds = (usageStats.totalTimeInForeground / 1000).toInt()
 
-                val usageMap = mapOf(
-                    "appName" to appName,
-                    "packageName" to packageName,
-                    "totalTimeInSeconds" to totalTimeInSeconds
-                )
-                usageList.add(usageMap)
-            } catch (e: PackageManager.NameNotFoundException) {
-                Log.w(TAG, "Package not found: ${usageStats.packageName}")
-            }
-        }
-
-        return usageList.sortedByDescending { it["totalTimeInSeconds"] as Int }
-    }
-
-    // Get usage statistics for the last 3 months
-    private fun get3MonthsUsageStats(context: Context): List<Map<String, Any>> {
-        if (!hasUsageAccessPermission(context)) {
-            return emptyList()
-        }
-
-        val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        val packageManager = context.packageManager
-
-        // Get stats for last 3 months
-        val calendar = Calendar.getInstance()
-        val endTime = System.currentTimeMillis()
-        calendar.add(Calendar.MONTH, -3)
-        val startTime = calendar.timeInMillis
-
-        val stats = usageStatsManager.queryUsageStats(
-            UsageStatsManager.INTERVAL_MONTHLY,
-            startTime,
-            endTime
-        )
-
-        val usageList = mutableListOf<Map<String, Any>>()
-
-        stats?.filter { it.totalTimeInForeground > 0 }?.forEach { usageStats ->
-            try {
-                val packageName = usageStats.packageName
-                val appInfo = packageManager.getApplicationInfo(packageName, 0)
-                val appName = packageManager.getApplicationLabel(appInfo).toString()
-                val totalTimeInSeconds = (usageStats.totalTimeInForeground / 1000).toInt()
-
-                val usageMap = mapOf(
-                    "appName" to appName,
-                    "packageName" to packageName,
-                    "totalTimeInSeconds" to totalTimeInSeconds
-                )
-                usageList.add(usageMap)
-            } catch (e: PackageManager.NameNotFoundException) {
-                Log.w(TAG, "Package not found: ${usageStats.packageName}")
-            }
-        }
-
-        return usageList.sortedByDescending { it["totalTimeInSeconds"] as Int }
-    }
-
-    // Get usage statistics for the last 6 months
-    private fun get6MonthsUsageStats(context: Context): List<Map<String, Any>> {
-        if (!hasUsageAccessPermission(context)) {
-            return emptyList()
-        }
-
-        val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        val packageManager = context.packageManager
-
-        // Get stats for last 6 months
-        val calendar = Calendar.getInstance()
-        val endTime = System.currentTimeMillis()
-        calendar.add(Calendar.MONTH, -6)
-        val startTime = calendar.timeInMillis
-
-        val stats = usageStatsManager.queryUsageStats(
-            UsageStatsManager.INTERVAL_MONTHLY,
-            startTime,
-            endTime
-        )
-
-        val usageList = mutableListOf<Map<String, Any>>()
-
-        stats?.filter { it.totalTimeInForeground > 0 }?.forEach { usageStats ->
-            try {
-                val packageName = usageStats.packageName
-                val appInfo = packageManager.getApplicationInfo(packageName, 0)
-                val appName = packageManager.getApplicationLabel(appInfo).toString()
-                val totalTimeInSeconds = (usageStats.totalTimeInForeground / 1000).toInt()
-
-                val usageMap = mapOf(
-                    "appName" to appName,
-                    "packageName" to packageName,
-                    "totalTimeInSeconds" to totalTimeInSeconds
-                )
-                usageList.add(usageMap)
-            } catch (e: PackageManager.NameNotFoundException) {
-                Log.w(TAG, "Package not found: ${usageStats.packageName}")
-            }
-        }
-
-        return usageList.sortedByDescending { it["totalTimeInSeconds"] as Int }
-    }
-
-    // Get usage statistics for the last 1 year
-    private fun get1YearUsageStats(context: Context): List<Map<String, Any>> {
-        if (!hasUsageAccessPermission(context)) {
-            return emptyList()
-        }
-
-        val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        val packageManager = context.packageManager
-
-        // Get stats for last 1 year
-        val calendar = Calendar.getInstance()
-        val endTime = System.currentTimeMillis()
-        calendar.add(Calendar.YEAR, -1)
-        val startTime = calendar.timeInMillis
-
-        val stats = usageStatsManager.queryUsageStats(
-            UsageStatsManager.INTERVAL_YEARLY,
-            startTime,
-            endTime
-        )
-
-        val usageList = mutableListOf<Map<String, Any>>()
-
-        stats?.filter { it.totalTimeInForeground > 0 }?.forEach { usageStats ->
-            try {
-                val packageName = usageStats.packageName
-                val appInfo = packageManager.getApplicationInfo(packageName, 0)
-                val appName = packageManager.getApplicationLabel(appInfo).toString()
-                val totalTimeInSeconds = (usageStats.totalTimeInForeground / 1000).toInt()
-
-                val usageMap = mapOf(
-                    "appName" to appName,
-                    "packageName" to packageName,
-                    "totalTimeInSeconds" to totalTimeInSeconds
-                )
-                usageList.add(usageMap)
-            } catch (e: PackageManager.NameNotFoundException) {
-                Log.w(TAG, "Package not found: ${usageStats.packageName}")
-            }
-        }
-
-        return usageList.sortedByDescending { it["totalTimeInSeconds"] as Int }
-    }
-
-    // Validate usage data accuracy
-    private fun validateUsageDataAccuracy(context: Context): Map<String, Any> {
-        val hasPermission = hasUsageAccessPermission(context)
-        val currentTime = System.currentTimeMillis()
-        val oneDayAgo = currentTime - (24 * 60 * 60 * 1000)
-        
-        val validationResult = mutableMapOf<String, Any>()
-        validationResult["hasPermission"] = hasPermission
-        validationResult["currentTime"] = currentTime
-        validationResult["oneDayAgo"] = oneDayAgo
-        
-        if (hasPermission) {
-            try {
-                val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-                val stats = usageStatsManager.queryUsageStats(
-                    UsageStatsManager.INTERVAL_DAILY,
-                    oneDayAgo,
-                    currentTime
-                )
-                
-                val totalApps = stats?.size ?: 0
-                val appsWithUsage = stats?.count { it.totalTimeInForeground > 0 } ?: 0
-                val totalUsageTime = stats?.sumOf { it.totalTimeInForeground } ?: 0L
-                
-                validationResult["totalApps"] = totalApps
-                validationResult["appsWithUsage"] = appsWithUsage
-                validationResult["totalUsageTime"] = totalUsageTime
-                validationResult["isDataAccurate"] = totalApps > 0 && appsWithUsage > 0
-                
-                Log.d(TAG, "Validation: $totalApps total apps, $appsWithUsage with usage, ${totalUsageTime/1000}s total time")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error during validation: ${e.message}")
-                validationResult["error"] = e.message ?: "Unknown error"
-            }
-        }
-        
-        return validationResult
-    }
-
-    // Blocking Service Helper Methods
-    private fun requestAccessibilityPermission() {
-        try {
-            val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
-            startActivity(intent)
-            Toast.makeText(this, "Please enable the blocking service in accessibility settings", Toast.LENGTH_LONG).show()
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to open accessibility settings: ${e.message}")
-            Toast.makeText(this, "Failed to open accessibility settings", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun openAccessibilitySettings() {
-        requestAccessibilityPermission()
-    }
-
-    private fun getInstalledApps(): List<Map<String, Any>> {
-        val pm = packageManager
-        val currentPackage = packageName
-
-        val mainIntent = Intent(Intent.ACTION_MAIN, null)
-        mainIntent.addCategory(Intent.CATEGORY_LAUNCHER)
-        val resolveInfos = pm.queryIntentActivities(mainIntent, 0)
-
-        val apps = mutableListOf<Map<String, Any>>()
-        resolveInfos.forEach { info ->
-            try {
-                val activityInfo = info.activityInfo ?: return@forEach
-                val appInfo = activityInfo.applicationInfo ?: return@forEach
-                val pkg = activityInfo.packageName
-
-                if (pkg == currentPackage) return@forEach
-
-                val isSystem = (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
-                if (isSystem) return@forEach
-
-                val appName = pm.getApplicationLabel(appInfo).toString()
-                apps.add(
+                usageList.add(
                     mapOf(
-                        "package_name" to pkg,
-                        "app_name" to appName
+                        "appName" to appName,
+                        "packageName" to packageName,
+                        "totalTimeInSeconds" to totalTimeInSeconds
                     )
                 )
-            } catch (_: Exception) { }
+            } catch (e: Exception) {
+                Log.w(TAG, "Package not found: ${usageStats.packageName}")
+            }
         }
 
-        return apps.distinctBy { it["package_name"] }.sortedBy { (it["app_name"] as String).lowercase() }
-    }
-
-    private fun updateBlockedApps(apps: List<String>) {
-        val legacyPrefs = getSharedPreferences("blocking_prefs", Context.MODE_PRIVATE)
-        legacyPrefs.edit().putString("blocked_apps", apps.joinToString(",")).apply()
-
-        val blockingDataPrefs = getSharedPreferences("blocking_data", Context.MODE_PRIVATE)
-        blockingDataPrefs.edit().putStringSet("blocked_apps", apps.toSet()).apply()
-
-        Log.d(TAG, "Updated blocked apps: ${apps.size} apps")
-    }
-
-    private fun updateBlockedKeywords(keywords: List<String>) {
-        val legacyPrefs = getSharedPreferences("blocking_prefs", Context.MODE_PRIVATE)
-        legacyPrefs.edit().putString("blocked_keywords", keywords.joinToString(",")).apply()
-
-        val blockingDataPrefs = getSharedPreferences("blocking_data", Context.MODE_PRIVATE)
-        blockingDataPrefs.edit().putStringSet("blocked_keywords", keywords.toSet()).apply()
-
-        Log.d(TAG, "Updated blocked keywords: ${keywords.size} keywords")
-    }
-
-    private fun updateWhitelistApps(apps: List<String>) {
-        val legacyPrefs = getSharedPreferences("blocking_prefs", Context.MODE_PRIVATE)
-        legacyPrefs.edit().putString("whitelist_apps", apps.joinToString(",")).apply()
-
-        val blockingDataPrefs = getSharedPreferences("blocking_data", Context.MODE_PRIVATE)
-        blockingDataPrefs.edit().putStringSet("whitelist_apps", apps.toSet()).apply()
-
-        Log.d(TAG, "Updated whitelist apps: ${apps.size} apps")
-    }
-
-    private fun setFocusMode(enabled: Boolean) {
-        val legacyPrefs = getSharedPreferences("blocking_prefs", Context.MODE_PRIVATE)
-        legacyPrefs.edit().putBoolean("focus_mode", enabled).apply()
-
-        val blockingDataPrefs = getSharedPreferences("blocking_data", Context.MODE_PRIVATE)
-        blockingDataPrefs.edit().putBoolean("focus_mode", enabled).apply()
-
-        Log.d(TAG, "Focus mode ${if (enabled) "enabled" else "disabled"}")
+        return usageList.sortedByDescending { it["totalTimeInSeconds"] as Int }
     }
 }
+
+class AdminReceiver : DeviceAdminReceiver() {
+
+    override fun onDisableRequested(context: Context, intent: Intent): CharSequence? {
+        try {
+            val warningIntent = Intent(context, WarningActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            }
+            context.startActivity(warningIntent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to launch WarningActivity: ${e.message}")
+        }
+
+        try {
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            launchIntent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            context.startActivity(launchIntent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to relaunch app: ${e.message}")
+        }
+
+        return """
+            ⚠️ Important Security Notice! ⚠️
+
+            This application cannot be disabled or removed.
+            Attempting to bypass protections may trigger automatic actions.
+            Please keep Device Admin enabled.
+        """.trimIndent()
+    }
+
+    override fun onEnabled(context: Context, intent: Intent) {
+        Toast.makeText(context, "Device Admin Enabled!", Toast.LENGTH_SHORT).show()
+    }
+
+    override fun onDisabled(context: Context, intent: Intent) {
+        Toast.makeText(context, "Device Admin Disabled!", Toast.LENGTH_SHORT).show()
+    }
+}
+
+class WarningActivity : Activity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.RED)
+            gravity = Gravity.CENTER
+            setPadding(50, 50, 50, 50)
+        }
+
+        val textView = TextView(this).apply {
+            text = """
+                🛑 Security alert detected!
+                Attempt to disable admin privileges is not allowed.
+                
+                Returning to the app...
+            """.trimIndent()
+            textSize = 24f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+        }
+
+        layout.addView(textView)
+        setContentView(layout)
+
+        Handler(Looper.getMainLooper()).post {
+            try {
+                val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+                launchIntent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                startActivity(launchIntent)
+                finish()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to relaunch app: ${e.message}")
+            }
+        }
+    }
+}
+
+class LongMessageActivity : Activity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        val scrollView = ScrollView(this)
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.BLACK)
+            setPadding(40, 40, 40, 40)
+        }
+
+        val textView = TextView(this).apply {
+            text = """
+                ⛔ IMPORTANT SECURITY TERMS ⛔
+
+                1. Do not attempt to remove device admin privileges.
+                2. The application monitors device usage for safety.
+                3. Uninstall is restricted while admin is active.
+                4. All actions may be logged for security purposes.
+                5. Continue scrolling to acknowledge all terms.
+                6. Failure to comply may result in automatic corrective actions.
+                7. Contact your administrator for assistance.
+            """.trimIndent()
+            textSize = 18f
+            setTextColor(Color.WHITE)
+        }
+
+        layout.addView(textView)
+        scrollView.addView(layout)
+        setContentView(scrollView)
+    }
+}
+
