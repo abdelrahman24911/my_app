@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import '../constants/app_colors.dart';
+import '../main.dart';
 import 'games/xoxo_game.dart';
 import 'games/sudoku_game.dart';
 
@@ -15,25 +16,38 @@ class _MiniGamesScreenState extends State<MiniGamesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF1B1B1B),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF1B1B1B),
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(
+            LucideIcons.menu,
+            color: Colors.white,
+            size: 24,
+          ),
+          onPressed: () {
+            rootNavScaffoldKey.currentState?.openDrawer();
+          },
+          tooltip: 'Menu',
+        ),
+        title: Text(
+          'Mini Games',
+          style: GoogleFonts.inter(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
       body: SafeArea(
         child: Column(
           children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Text(
-                'Mini Games',
-                style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.purple,
-                    ),
-              ),
-            ),
             // Games Grid
             Expanded(
               child: GridView.count(
                 crossAxisCount: 2,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.all(16),
                 mainAxisSpacing: 16,
                 crossAxisSpacing: 16,
                 children: [

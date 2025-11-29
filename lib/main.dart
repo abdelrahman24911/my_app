@@ -20,8 +20,6 @@ import 'screens/login_screen.dart';
 import 'screens/parental_control_screen.dart';
 import 'screens/analytics_screen.dart';
 import 'screens/mini_games_screen.dart';
-import 'screens/sleep_tracking_screen.dart';
-import 'screens/step_counter_screen.dart';
 import 'screens/sleep_tracker_screen.dart';
 import 'screens/step_tracker_screen.dart';
 import 'services/screen_time_service.dart';
@@ -113,28 +111,27 @@ class _RootNavState extends State<RootNav> {
   int _index = 0;
   
   final _screens = [
-    const HomeScreen(),
-    const ChallengesScreen(),
-    const MiniGamesScreen(),
-    const SleepTrackingScreen(),
-    const StepCounterScreen(),
-    const CommunityScreen(),
-    const AnalyticsScreen(),
-    const SleepTrackerScreen(),
-    const StepTrackerScreen(),
-    const ParentalControlScreen(),
-    const ProfileScreen(),
+    const HomeScreen(),                    // 0
+    const ChallengesScreen(),              // 1
+    const MiniGamesScreen(),               // 2
+    const CommunityScreen(),               // 3
+    const AnalyticsScreen(),               // 4
+    const SleepTrackerScreen(),            // 5
+    const StepTrackerScreen(),             // 6
+    const ParentalControlScreen(),         // 7
+    const ProfileScreen(),                 // 8
   ];
 
   final List<_NavItem> _navItems = const [
     _NavItem(icon: LucideIcons.home, label: 'Home', index: 0),
     _NavItem(icon: LucideIcons.target, label: 'Challenges', index: 1),
-    _NavItem(icon: LucideIcons.users, label: 'Community', index: 2),
-    _NavItem(icon: LucideIcons.barChart3, label: 'Analytics', index: 3),
-    _NavItem(icon: LucideIcons.moon, label: 'Sleep Tracker', index: 4),
-    _NavItem(icon: LucideIcons.footprints, label: 'Step Tracker', index: 5),
-    _NavItem(icon: LucideIcons.shield, label: 'Parental', index: 6),
-    _NavItem(icon: LucideIcons.user, label: 'Profile', index: 7),
+    _NavItem(icon: LucideIcons.gamepad2, label: 'Mini Games', index: 2),
+    _NavItem(icon: LucideIcons.users, label: 'Community', index: 3),
+    _NavItem(icon: LucideIcons.barChart3, label: 'Analytics', index: 4),
+    _NavItem(icon: LucideIcons.moon, label: 'Sleep Tracker', index: 5),
+    _NavItem(icon: LucideIcons.footprints, label: 'Step Tracker', index: 6),
+    _NavItem(icon: LucideIcons.shield, label: 'Parental', index: 7),
+    _NavItem(icon: LucideIcons.user, label: 'Profile', index: 8),
   ];
 
   void _navigateTo(int index) {
@@ -145,7 +142,6 @@ class _RootNavState extends State<RootNav> {
   @override
   Widget build(BuildContext context) {
     final selectedColor = AppColors.purple;
-    final unselectedColor = Colors.grey;
 
     return Scaffold(
       key: rootNavScaffoldKey,
@@ -245,21 +241,6 @@ class _RootNavState extends State<RootNav> {
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 250),
         child: _screens[_index],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _index,
-        onTap: (i) => setState(() => _index = i),
-        selectedItemColor: selectedColor,
-        unselectedItemColor: unselectedColor,
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(LucideIcons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(LucideIcons.target), label: 'Challenges'),
-          BottomNavigationBarItem(icon: Icon(LucideIcons.users), label: 'Community'),
-          BottomNavigationBarItem(icon: Icon(LucideIcons.barChart3), label: 'Analytics'),
-          BottomNavigationBarItem(icon: Icon(LucideIcons.shield), label: 'Parental'),
-          BottomNavigationBarItem(icon: Icon(LucideIcons.user), label: 'Profile'),
-        ],
       ),
     );
   }
