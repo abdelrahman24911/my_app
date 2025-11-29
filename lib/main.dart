@@ -10,6 +10,8 @@ import 'models/user_model.dart';
 import 'models/auth_model.dart';
 import 'models/parental_control_model.dart';
 import 'models/screen_time_model.dart';
+import 'models/sleep_model.dart';
+import 'models/step_counter_model.dart';
 import 'screens/challenges_screen.dart';
 import 'screens/community_screen.dart';
 import 'screens/home_screen.dart';
@@ -17,6 +19,9 @@ import 'screens/profile_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/parental_control_screen.dart';
 import 'screens/analytics_screen.dart';
+import 'screens/mini_games_screen.dart';
+import 'screens/sleep_tracking_screen.dart';
+import 'screens/step_counter_screen.dart';
 import 'screens/sleep_tracker_screen.dart';
 import 'screens/step_tracker_screen.dart';
 import 'services/screen_time_service.dart';
@@ -57,6 +62,8 @@ class MindQuestApp extends StatelessWidget {
         ),
         ChangeNotifierProvider(create: (_) => MissionsModel()),
         ChangeNotifierProvider(create: (_) => ParentalControlModel()),
+        ChangeNotifierProvider(create: (_) => SleepModel()),
+        ChangeNotifierProvider(create: (_) => StepCounterModel()),
         ChangeNotifierProvider(create: (_) {
           final screenTimeModel = ScreenTimeModel();
           ScreenTimeService.initialize(screenTimeModel);
@@ -105,15 +112,18 @@ final GlobalKey<ScaffoldState> rootNavScaffoldKey = GlobalKey<ScaffoldState>();
 class _RootNavState extends State<RootNav> {
   int _index = 0;
   
-  final _screens = const [
-    HomeScreen(),
-    ChallengesScreen(),
-    CommunityScreen(),
-    AnalyticsScreen(),
-    SleepTrackerScreen(),
-    StepTrackerScreen(),
-    ParentalControlScreen(),
-    ProfileScreen(),
+  final _screens = [
+    const HomeScreen(),
+    const ChallengesScreen(),
+    const MiniGamesScreen(),
+    const SleepTrackingScreen(),
+    const StepCounterScreen(),
+    const CommunityScreen(),
+    const AnalyticsScreen(),
+    const SleepTrackerScreen(),
+    const StepTrackerScreen(),
+    const ParentalControlScreen(),
+    const ProfileScreen(),
   ];
 
   final List<_NavItem> _navItems = const [
@@ -135,6 +145,7 @@ class _RootNavState extends State<RootNav> {
   @override
   Widget build(BuildContext context) {
     final selectedColor = AppColors.purple;
+    final unselectedColor = Colors.grey;
 
     return Scaffold(
       key: rootNavScaffoldKey,
@@ -235,13 +246,20 @@ class _RootNavState extends State<RootNav> {
         duration: const Duration(milliseconds: 250),
         child: _screens[_index],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          rootNavScaffoldKey.currentState?.openDrawer();
-        },
-        backgroundColor: AppColors.purple,
-        child: const Icon(LucideIcons.menu, color: Colors.white),
-        tooltip: 'Open Menu',
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _index,
+        onTap: (i) => setState(() => _index = i),
+        selectedItemColor: selectedColor,
+        unselectedItemColor: unselectedColor,
+        type: BottomNavigationBarType.fixed,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(LucideIcons.home), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(LucideIcons.target), label: 'Challenges'),
+          BottomNavigationBarItem(icon: Icon(LucideIcons.users), label: 'Community'),
+          BottomNavigationBarItem(icon: Icon(LucideIcons.barChart3), label: 'Analytics'),
+          BottomNavigationBarItem(icon: Icon(LucideIcons.shield), label: 'Parental'),
+          BottomNavigationBarItem(icon: Icon(LucideIcons.user), label: 'Profile'),
+        ],
       ),
     );
   }

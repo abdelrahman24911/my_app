@@ -32,6 +32,8 @@ dependencies:
   mailer: ^6.6.0
   crypto: ^3.0.6
   local_auth: ^2.2.1
+  sensors_plus: ^7.0.0
+  pedometer: ^4.0.0
 
 dev_dependencies:
   flutter_lints: ^4.0.0
